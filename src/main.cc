@@ -698,7 +698,7 @@ int main(int argc, char** argv) {
     TirtcInitOptions init_options{};
     init_options.app_id = options.app_id.c_str();
     init_options.endpoint = options.endpoint.c_str();
-    init_options.console_log_enabled = 1;
+    init_options.console_log_enabled = 0;
     if (!check_error(tirtc_init(&init_options), "tirtc_init failed", &stats)) {
       break;
     }
