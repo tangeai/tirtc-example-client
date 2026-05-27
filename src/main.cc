@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -25,6 +26,7 @@ constexpr int kExitArgError = 2;
 constexpr int kConnectTimeoutMs = 15000;
 constexpr int kDefaultDurationSeconds = 60;
 constexpr int kMaxStreamId = 15;
+constexpr auto kProgressLogInterval = std::chrono::seconds(1);
 
 using Clock = std::chrono::steady_clock;
 
@@ -58,6 +60,14 @@ struct ClientStats {
   uint64_t video_bytes = 0;
   std::optional<int64_t> first_audio_ms;
   std::optional<int64_t> first_video_ms;
+};
+
+struct ClientStatsSample {
+  bool connected = false;
+  uint64_t audio_frames = 0;
+  uint64_t video_frames = 0;
+  uint64_t audio_bytes = 0;
+  uint64_t video_bytes = 0;
 };
 
 struct Resources {
@@ -108,6 +118,16 @@ std::string json_escape(const std::string& value) {
 
 int64_t elapsed_ms(Clock::time_point start, Clock::time_point end = Clock::now()) {
   return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+}
+
+ClientStatsSample capture_stats_sample(const ClientStats& stats) {
+  ClientStatsSample sample{};
+  sample.connected = stats.connected;
+  sample.audio_frames = stats.audio_frames;
+  sample.video_frames = stats.video_frames;
+  sample.audio_bytes = stats.audio_bytes;
+  sample.video_bytes = stats.video_bytes;
+  return sample;
 }
 
 void set_failure(ClientStats* stats, int error_code, const std::string& message) {
@@ -244,24 +264,29 @@ int parse_args(int argc, char** argv, CliOptions* options, std::string* error_me
     };
     if (arg == "--app-id") {
       const char* value = require_value(arg);
-      if (value == nullptr) return kExitArgError;
+      if (value == nullptr)
+        return kExitArgError;
       options->app_id = value;
     } else if (arg == "--endpoint") {
       const char* value = require_value(arg);
-      if (value == nullptr) return kExitArgError;
+      if (value == nullptr)
+        return kExitArgError;
       options->endpoint = value;
     } else if (arg == "--device-id") {
       const char* value = require_value(arg);
-      if (value == nullptr) return kExitArgError;
+      if (value == nullptr)
+        return kExitArgError;
       options->device_id = value;
     } else if (arg == "--token") {
       const char* value = require_value(arg);
-      if (value == nullptr) return kExitArgError;
+      if (value == nullptr)
+        return kExitArgError;
       options->token = value;
     } else if (arg == "--duration-seconds") {
       const char* value = require_value(arg);
       int parsed = 0;
-      if (value == nullptr) return kExitArgError;
+      if (value == nullptr)
+        return kExitArgError;
       if (!parse_int_range(value, 1, 24 * 60 * 60, &parsed)) {
         *error_message = "--duration-seconds must be a positive integer";
         return kExitArgError;
@@ -359,8 +384,86 @@ void print_summary(const ClientStats& stats, bool passed) {
     std::cout << "null";
   }
   std::cout << ",\"error_code\":" << (passed ? 0 : stats.error_code) << ","
-            << "\"error_message\":\"" << json_escape(passed ? "" : stats.error_message)
-            << "\"}" << std::endl;
+            << "\"error_message\":\"" << json_escape(passed ? "" : stats.error_message) << "\"}"
+            << std::endl;
+}
+
+void print_progress(const ClientStatsSample& sample, const Resources& resources,
+                    Clock::time_point process_started) {
+  std::cerr << "TIRTC_CLIENT_PROGRESS elapsed_ms=" << elapsed_ms(process_started)
+            << " connected=" << (sample.connected ? 1 : 0)
+            << " audio_frames=" << sample.audio_frames << " audio_bytes=" << sample.audio_bytes
+            << " video_frames=" << sample.video_frames << " video_bytes=" << sample.video_bytes;
+
+  if (resources.connection != nullptr) {
+    TirtcConnMetricsSnapshot snapshot{};
+    const TirtcError error = tirtc_metrics_conn_get_snapshot(resources.connection, &snapshot);
+    if (error == TIRTC_ERROR_OK) {
+      std::cerr << " conn_has_start=" << snapshot.has_connect_start
+                << " conn_has_connected=" << snapshot.has_connected;
+    } else {
+      std::cerr << " conn_snapshot_error=" << static_cast<int>(error);
+    }
+  }
+
+  if (resources.audio_output != nullptr) {
+    TirtcAudioOutputMetricsSnapshot metrics{};
+    const TirtcError metrics_error =
+        tirtc_metrics_audio_output_get_snapshot(resources.audio_output, &metrics);
+    if (metrics_error == TIRTC_ERROR_OK) {
+      std::cerr << " audio_input_kbps=" << metrics.input_bitrate_kbps
+                << " audio_input_pps=" << metrics.input_packet_rate
+                << " audio_render_rate=" << metrics.render_callback_rate
+                << " audio_pending_undecoded_ms=" << metrics.pending.undecoded_duration_ms
+                << " audio_pending_decoded_ms=" << metrics.pending.decoded_duration_ms
+                << " audio_stutter_count=" << metrics.stutter.session_stutter_count
+                << " audio_stutter_ms=" << metrics.stutter.session_stutter_total_ms;
+    } else {
+      std::cerr << " audio_metrics_error=" << static_cast<int>(metrics_error);
+    }
+
+    TirtcAudioOutputDebugSnapshot debug{};
+    const TirtcError debug_error =
+        tirtc_audio_output_get_debug_snapshot(resources.audio_output, &debug);
+    if (debug_error == TIRTC_ERROR_OK) {
+      std::cerr << " audio_codec=" << static_cast<int>(debug.codec)
+                << " audio_sample_rate_hz=" << debug.sample_rate_hz
+                << " audio_channels=" << debug.channels;
+    } else {
+      std::cerr << " audio_debug_error=" << static_cast<int>(debug_error);
+    }
+  }
+
+  if (resources.video_output != nullptr) {
+    TirtcVideoOutputMetricsSnapshot metrics{};
+    const TirtcError metrics_error =
+        tirtc_metrics_video_output_get_snapshot(resources.video_output, &metrics);
+    if (metrics_error == TIRTC_ERROR_OK) {
+      std::cerr << " video_input_kbps=" << metrics.input_bitrate_kbps
+                << " video_input_fps=" << metrics.input_fps
+                << " video_decoded_fps=" << metrics.decoded_fps
+                << " video_render_fps=" << metrics.render_fps
+                << " video_pending_undecoded_ms=" << metrics.pending.undecoded_duration_ms
+                << " video_pending_decoded_ms=" << metrics.pending.decoded_duration_ms
+                << " video_stutter_count=" << metrics.stutter.session_stutter_count
+                << " video_stutter_ms=" << metrics.stutter.session_stutter_total_ms;
+    } else {
+      std::cerr << " video_metrics_error=" << static_cast<int>(metrics_error);
+    }
+
+    TirtcVideoOutputDebugSnapshot debug{};
+    const TirtcError debug_error =
+        tirtc_video_output_get_debug_snapshot(resources.video_output, &debug);
+    if (debug_error == TIRTC_ERROR_OK) {
+      std::cerr << " video_codec=" << static_cast<int>(debug.codec)
+                << " video_width=" << debug.width << " video_height=" << debug.height
+                << " video_decoder_backend=" << static_cast<int>(debug.resolved_decoder_backend);
+    } else {
+      std::cerr << " video_debug_error=" << static_cast<int>(debug_error);
+    }
+  }
+
+  std::cerr << std::endl;
 }
 
 void cleanup(Resources* resources) {
@@ -498,11 +601,9 @@ bool connect_and_wait(const CliOptions& options, ClientStats* stats, Resources* 
   resources->connect_started = true;
 
   std::unique_lock<std::mutex> lock(stats->mutex);
-  const bool connected = stats->condition.wait_for(lock, std::chrono::milliseconds(kConnectTimeoutMs),
-                                                   [&]() {
-                                                     return stats->connected || stats->failed ||
-                                                            stats->disconnected;
-                                                   });
+  const bool connected = stats->condition.wait_for(
+      lock, std::chrono::milliseconds(kConnectTimeoutMs),
+      [&]() { return stats->connected || stats->failed || stats->disconnected; });
   if (!connected || !stats->connected) {
     if (!stats->failed) {
       stats->failed = true;
@@ -514,11 +615,23 @@ bool connect_and_wait(const CliOptions& options, ClientStats* stats, Resources* 
   return true;
 }
 
-bool run_window_and_check(const CliOptions& options, ClientStats* stats) {
+bool run_window_and_check(const CliOptions& options, ClientStats* stats,
+                          const Resources& resources) {
   const auto deadline = Clock::now() + std::chrono::seconds(options.duration_seconds);
+  auto next_progress = Clock::now() + kProgressLogInterval;
   std::unique_lock<std::mutex> lock(stats->mutex);
   while (!stats->failed && Clock::now() < deadline) {
-    stats->condition.wait_until(lock, deadline);
+    const auto wait_until = std::min(deadline, next_progress);
+    stats->condition.wait_until(lock, wait_until);
+    const auto now = Clock::now();
+    if (!stats->failed && now >= next_progress) {
+      const ClientStatsSample sample = capture_stats_sample(*stats);
+      const Clock::time_point process_started = stats->process_started;
+      lock.unlock();
+      print_progress(sample, resources, process_started);
+      lock.lock();
+      next_progress = now + kProgressLogInterval;
+    }
   }
   if (stats->failed) {
     return false;
@@ -573,7 +686,7 @@ int main(int argc, char** argv) {
     if (!connect_and_wait(options, &stats, &resources)) {
       break;
     }
-    passed = run_window_and_check(options, &stats);
+    passed = run_window_and_check(options, &stats, resources);
   } while (false);
 
   cleanup(&resources);
@@ -588,4 +701,3 @@ int main(int argc, char** argv) {
   }
   return passed ? 0 : kExitRuntimeFailed;
 }
-
