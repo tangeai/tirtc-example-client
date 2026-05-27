@@ -60,3 +60,9 @@ PLATFORM=linux-x64 ./script/build.sh
 `--stream-id` 是 `--video-stream-id` 的简写。stream id 取值范围是 `0..15`；同时接收音频和视频时，音频 stream id 与视频 stream id 不能相同。
 
 这个示例不会把音频播放到系统设备，也不会打开窗口渲染视频。音频和视频回调只用于统计帧数、字节数以及输出状态。
+
+## 开发者文档
+
+更详细的 TiRTC 接入说明、概念解释和平台文档请参考：
+
+https://docs.tange.ai/products/tirtc/
