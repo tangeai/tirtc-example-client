@@ -1,10 +1,11 @@
 # TiRTC Client Example
 
-这是一个最小 TiRTC 客户端下行示例。它连接到一个正在上行送流的设备端，直接接收音频和视频流，通过回调 sink 统计收到的帧数和字节数，并在运行过程中输出 `TIRTC_CLIENT_PROGRESS`，退出前输出一行 `TIRTC_CLIENT_SUMMARY`。
+这是一个最小 TiRTC 客户端下行示例。
+它连接到一个正在上行送流的设备端，直接接收音频和视频流，通过回调统计收到的帧数和字节数，并在运行过程中输出 `TIRTC_CLIENT_PROGRESS`，退出前输出一行 `TIRTC_CLIENT_SUMMARY`。
 
-当前示例按“设备端连接后直接发流、客户端连接后直接收流”的方式设计，不包含 `subscribe_audio` / `subscribe_video` 这类订阅交互逻辑。
+**注意：** 当前示例按 **“设备端连接后直接发流、客户端连接后直接收流”** 的方式设计，不包含 `subscribe_audio` / `subscribe_video` 这类订阅交互逻辑。
 
-## 准备 Runtime
+## 准备 TiRTC SDK
 
 ```sh
 ./script/prepare.sh
@@ -63,6 +64,6 @@ PLATFORM=linux-x64 ./script/build.sh
 
 ## 开发者文档
 
-更详细的 TiRTC 接入说明、概念解释和平台文档请参考：
+更详细的 TiRTC 接入说明、概念解释和平台文档参考：
 
 https://docs.tange.ai/products/tirtc/
