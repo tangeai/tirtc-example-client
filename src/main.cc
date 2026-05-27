@@ -245,6 +245,17 @@ bool parse_int_range(const char* value, int min_value, int max_value, int* out) 
   return true;
 }
 
+std::string join_names(const std::vector<std::string>& names) {
+  std::ostringstream out;
+  for (size_t index = 0; index < names.size(); ++index) {
+    if (index > 0) {
+      out << ", ";
+    }
+    out << names[index];
+  }
+  return out.str();
+}
+
 int parse_args(int argc, char** argv, CliOptions* options, std::string* error_message) {
   bool has_stream_id = false;
   uint8_t stream_id = 0;
@@ -341,9 +352,21 @@ int parse_args(int argc, char** argv, CliOptions* options, std::string* error_me
     options->video_stream_id = stream_id;
     options->has_video_stream_id = true;
   }
-  if (options->app_id.empty() || options->endpoint.empty() || options->device_id.empty() ||
-      options->token.empty()) {
-    *error_message = "--app-id, --endpoint, --device-id, and --token are required";
+  std::vector<std::string> missing_required_args;
+  if (options->app_id.empty()) {
+    missing_required_args.push_back("--app-id");
+  }
+  if (options->endpoint.empty()) {
+    missing_required_args.push_back("--endpoint");
+  }
+  if (options->device_id.empty()) {
+    missing_required_args.push_back("--device-id");
+  }
+  if (options->token.empty()) {
+    missing_required_args.push_back("--token");
+  }
+  if (!missing_required_args.empty()) {
+    *error_message = "missing required argument(s): " + join_names(missing_required_args);
     return kExitArgError;
   }
   if (options->require_audio != 0 && !options->has_audio_stream_id) {
