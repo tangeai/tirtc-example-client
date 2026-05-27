@@ -1,7 +1,7 @@
 # TiRTC Client Example
 
 这是一个 TiRTC C 客户端示例，适用于 macOS 和 Linux。
-它连接到一个正在上行送流的设备端，直接接收音频和视频流，通过回调统计收到的帧数和字节数，并在运行过程中输出 `TIRTC_CLIENT_PROGRESS`，退出前输出一行 `TIRTC_CLIENT_SUMMARY`。
+它连接到一个正在上行送流的设备端，直接接收音频和视频流，并通过回调统计收到的帧数和字节数。
 
 **注意：** 当前示例按 **“设备端连接后直接发流、客户端连接后直接收流”** 的方式设计，不包含 `subscribe_audio` / `subscribe_video` 这类订阅交互逻辑。
 
