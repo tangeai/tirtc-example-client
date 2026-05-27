@@ -1,6 +1,6 @@
 # TiRTC Client Example
 
-这是一个最小 TiRTC 客户端下行示例。
+这是一个 TiRTC C 客户端示例，适用于 macOS 和 Linux。
 它连接到一个正在上行送流的设备端，直接接收音频和视频流，通过回调统计收到的帧数和字节数，并在运行过程中输出 `TIRTC_CLIENT_PROGRESS`，退出前输出一行 `TIRTC_CLIENT_SUMMARY`。
 
 **注意：** 当前示例按 **“设备端连接后直接发流、客户端连接后直接收流”** 的方式设计，不包含 `subscribe_audio` / `subscribe_video` 这类订阅交互逻辑。
@@ -12,14 +12,6 @@
 ```
 
 默认会下载 `tangeai/tirtc-example-client` 最新 GitHub Release 里的 runtime 包，并写入本地 `3rd/`。
-
-本地测试时也可以指定 release zip：
-
-```sh
-./script/prepare.sh --zip /path/to/YYYYMMDDHHMMSS.zip
-```
-
-prepare 只替换 `3rd/`，不会修改 `src/`、`script/`、`README.md` 或 `Makefile`。
 
 ## 构建
 
